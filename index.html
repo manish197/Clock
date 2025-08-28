@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Country Time vs IST</title>
+<style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+    h2 { text-align: center; }
+    #searchBox, #countryInput, #dateInput { padding: 8px; margin: 5px; }
+    #refreshBtn, #convertBtn { padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    #convertBtn { background: #007BFF; }
+    #refreshBtn:hover { background: #218838; }
+    #convertBtn:hover { background: #0056b3; }
+    table { border-collapse: collapse; width: 100%; background: white; border-radius: 8px; overflow: hidden; margin-top: 10px; }
+    th, td { padding: 10px; text-align: left; }
+    th { background: #007BFF; color: white; cursor: pointer; }
+    tr:nth-child(even) { background: #f2f2f2; }
+    tr:hover { background: #e9f5ff; }
+    .positive { color: green; font-weight: bold; }
+    .negative { color: red; font-weight: bold; }
+    #converterResult { margin-top: 10px; font-weight: bold; }
+    .section { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+</style>
+</head>
+<body>
+
+<h2>🌍 Current Time in African Countries vs IST</h2>
+
+<div class="section">
+    <input type="text" id="searchBox" placeholder="Search country...">
+    <button id="refreshBtn">🔄 Refresh Times</button>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th onclick="sortTable(0)">Country ⬍</th>
+            <th>Local Time</th>
+            <th>IST Time</th>
+            <th onclick="sortTable(3)">Diff. (hrs) ⬍</th>
+        </tr>
+    </thead>
+    <tbody id="timeTable"></tbody>
+</table>
+
+<div class="section">
+    <h3>🕒 Convert Any Country Time to IST</h3>
+    <input type="text" id="countryInput" placeholder="Enter country name from list">
+    <input type="datetime-local" id="dateInput">
+    <button id="convertBtn">Convert</button>
+    <div id="converterResult"></div>
+</div>
+
+<script>
+const countries = {
+    "Benin": "Africa/Porto-Novo",
+    "Cameroon": "Africa/Douala",
+    "Congo B": "Africa/Brazzaville",
+    "Ghana": "Africa/Accra",
+    "Guinea Bissau": "Africa/Bissau",
+    "Guinea Conakry": "Africa/Conakry",
+    "Ivory Coast": "Africa/Abidjan",
+    "Liberia": "Africa/Monrovia",
+    "Nigeria": "Africa/Lagos",
+    "South Africa": "Africa/Johannesburg",
+    "Sudan": "Africa/Khartoum",
+    "South Sudan": "Africa/Juba",
+    "Swaziland": "Africa/Mbabane",
+    "Uganda": "Africa/Kampala",
+    "Zambia": "Africa/Lusaka"
+};
+
+function getOffsetHours(tz1, tz2) {
+    let now = new Date();
+    let diffMs = (
+        new Date(now.toLocaleString("en-US", {timeZone: tz1})) -
+        new Date(now.toLocaleString("en-US", {timeZone: tz2}))
+    );
+    return (diffMs / 3600000).toFixed(1);
+}
+
+function updateTimes() {
+    const tableBody = document.getElementById("timeTable");
+    tableBody.innerHTML = "";
+    const istZone = "Asia/Kolkata";
+
+    for (let country in countries) {
+        let tz = countries[country];
+        let localTime = new Date().toLocaleString("en-GB", { timeZone: tz });
+        let istTime = new Date().toLocaleString("en-GB", { timeZone: istZone });
+        let offset = getOffsetHours(istZone, tz);
+        let offsetClass = offset >= 0 ? "positive" : "negative";
+
+        let row = `<tr>
+            <td>${country}</td>
+            <td>${localTime}</td>
+            <td>${istTime}</td>
+            <td class="${offsetClass}">${offset > 0 ? "+" + offset : offset}</td>
+        </tr>`;
+        tableBody.innerHTML += row;
+    }
+}
+
+function sortTable(colIndex) {
+    let table = document.querySelector("table tbody");
+    let rows = Array.from(table.rows);
+    let asc = table.getAttribute("data-sort") !== "asc";
+    rows.sort((a, b) => {
+        let valA = a.cells[colIndex].innerText;
+        let valB = b.cells[colIndex].innerText;
+        if (!isNaN(valA) && !isNaN(valB)) {
+            return asc ? valA - valB : valB - valA;
+        }
+        return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    });
+    table.innerHTML = "";
+    rows.forEach(r => table.appendChild(r));
+    table.setAttribute("data-sort", asc ? "asc" : "desc");
+}
+
+document.getElementById("searchBox").addEventListener("keyup", function() {
+    let filter = this.value.toLowerCase();
+    document.querySelectorAll("#timeTable tr").forEach(row => {
+        let country = row.cells[0].innerText.toLowerCase();
+        row.style.display = country.includes(filter) ? "" : "none";
+    });
+});
+
+document.getElementById("refreshBtn").addEventListener("click", updateTimes);
+
+document.getElementById("convertBtn").addEventListener("click", function() {
+    let countryName = document.getElementById("countryInput").value.trim();
+    let dateValue = document.getElementById("dateInput").value;
+
+    if (!countries[countryName]) {
+        document.getElementById("converterResult").innerHTML = "❌ Country not found in list.";
+        return;
+    }
+    if (!dateValue) {
+        document.getElementById("converterResult").innerHTML = "❌ Please select a date and time.";
+        return;
+    }
+
+    let tz = countries[countryName];
+    let istZone = "Asia/Kolkata";
+
+    let localDate = new Date(dateValue);
+    // Convert local country time to UTC
+    let utcTime = new Date(localDate.toLocaleString("en-US", { timeZone: "UTC" }));
+    // Adjust to IST
+    let istTime = new Date(localDate.toLocaleString("en-US", { timeZone: istZone }));
+
+    // Trick: Interpret input as country time, then convert to IST
+    let parsedLocal = new Date(dateValue);
+    let offsetMs = (
+        new Date(parsedLocal.toLocaleString("en-US", { timeZone: istZone })) -
+        new Date(parsedLocal.toLocaleString("en-US", { timeZone: tz }))
+    );
+    let istConverted = new Date(parsedLocal.getTime() + offsetMs);
+
+    document.getElementById("converterResult").innerHTML =
+        `✅ ${countryName} time <b>${parsedLocal.toLocaleString()}</b> → IST time <b>${istConverted.toLocaleString()}</b>`;
+});
+
+// Initial load
+updateTimes();
+</script>
+<div style="text-align:center; margin-top:20px; font-size:0.9em; color:#555;">
+    Designed by: Manish Mishra
+</div>
+
+</body>
+</html>
