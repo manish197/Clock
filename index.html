@@ -6,7 +6,7 @@
 <style>
     body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
     h2 { text-align: center; }
-    #searchBox, #countryInput, #dateInput { padding: 8px; margin: 5px; }
+    #searchBox, #dateInput { padding: 8px; margin: 5px; }
     #refreshBtn, #convertBtn { padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
     #convertBtn { background: #007BFF; }
     #refreshBtn:hover { background: #218838; }
@@ -37,17 +37,19 @@
             <th onclick="sortTable(0)">Country ⬍</th>
             <th>Local Time</th>
             <th>IST Time</th>
-            <th onclick="sortTable(3)">Diff. (hrs) ⬍</th>
+            <th onclick="sortTable(3)">Difference ⬍</th>
         </tr>
     </thead>
     <tbody id="timeTable"></tbody>
 </table>
 
 <div class="section">
-    <h3>🕒 Convert Any Country Time to IST</h3>
-    <input type="text" id="countryInput" placeholder="Enter country name from list">
+    <h3>🕒 Convert Between IST and Country Time</h3>
+    <select id="countrySelect"></select>
+    <br><br>
+    <label><b>Enter IST time:</b></label>
     <input type="datetime-local" id="dateInput">
-    <button id="convertBtn">Convert</button>
+    <button id="convertBtn">Convert IST → Country</button>
     <div id="converterResult"></div>
 </div>
 
@@ -70,13 +72,20 @@ const countries = {
     "Zambia": "Africa/Lusaka"
 };
 
-function getOffsetHours(tz1, tz2) {
+// Populate dropdown
+const select = document.getElementById("countrySelect");
+for (let country in countries) {
+    let opt = document.createElement("option");
+    opt.value = country;
+    opt.textContent = country;
+    select.appendChild(opt);
+}
+
+function getOffsetHours(countryTZ, istTZ) {
     let now = new Date();
-    let diffMs = (
-        new Date(now.toLocaleString("en-US", {timeZone: tz1})) -
-        new Date(now.toLocaleString("en-US", {timeZone: tz2}))
-    );
-    return (diffMs / 3600000).toFixed(1);
+    let countryTime = new Date(now.toLocaleString("en-US", { timeZone: countryTZ }));
+    let istTime = new Date(now.toLocaleString("en-US", { timeZone: istTZ }));
+    return (countryTime - istTime) / 3600000; // hrs
 }
 
 function updateTimes() {
@@ -88,14 +97,16 @@ function updateTimes() {
         let tz = countries[country];
         let localTime = new Date().toLocaleString("en-GB", { timeZone: tz });
         let istTime = new Date().toLocaleString("en-GB", { timeZone: istZone });
-        let offset = getOffsetHours(istZone, tz);
-        let offsetClass = offset >= 0 ? "positive" : "negative";
+        let offset = getOffsetHours(tz, istZone);
+
+        // Correct sign: ahead = +, behind = -
+        let offsetText = (offset >= 0 ? "+" : "") + offset.toFixed(1) + " hrs";
 
         let row = `<tr>
             <td>${country}</td>
             <td>${localTime}</td>
             <td>${istTime}</td>
-            <td class="${offsetClass}">${offset > 0 ? "+" + offset : offset}</td>
+            <td>${offsetText}</td>
         </tr>`;
         tableBody.innerHTML += row;
     }
@@ -108,9 +119,6 @@ function sortTable(colIndex) {
     rows.sort((a, b) => {
         let valA = a.cells[colIndex].innerText;
         let valB = b.cells[colIndex].innerText;
-        if (!isNaN(valA) && !isNaN(valB)) {
-            return asc ? valA - valB : valB - valA;
-        }
         return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
     table.innerHTML = "";
@@ -118,6 +126,7 @@ function sortTable(colIndex) {
     table.setAttribute("data-sort", asc ? "asc" : "desc");
 }
 
+// Search filter
 document.getElementById("searchBox").addEventListener("keyup", function() {
     let filter = this.value.toLowerCase();
     document.querySelectorAll("#timeTable tr").forEach(row => {
@@ -126,16 +135,14 @@ document.getElementById("searchBox").addEventListener("keyup", function() {
     });
 });
 
+// Refresh button
 document.getElementById("refreshBtn").addEventListener("click", updateTimes);
 
+// IST → Country conversion
 document.getElementById("convertBtn").addEventListener("click", function() {
-    let countryName = document.getElementById("countryInput").value.trim();
+    let countryName = document.getElementById("countrySelect").value;
     let dateValue = document.getElementById("dateInput").value;
 
-    if (!countries[countryName]) {
-        document.getElementById("converterResult").innerHTML = "❌ Country not found in list.";
-        return;
-    }
     if (!dateValue) {
         document.getElementById("converterResult").innerHTML = "❌ Please select a date and time.";
         return;
@@ -144,27 +151,22 @@ document.getElementById("convertBtn").addEventListener("click", function() {
     let tz = countries[countryName];
     let istZone = "Asia/Kolkata";
 
-    let localDate = new Date(dateValue);
-    // Convert local country time to UTC
-    let utcTime = new Date(localDate.toLocaleString("en-US", { timeZone: "UTC" }));
-    // Adjust to IST
-    let istTime = new Date(localDate.toLocaleString("en-US", { timeZone: istZone }));
-
-    // Trick: Interpret input as country time, then convert to IST
-    let parsedLocal = new Date(dateValue);
+    let istDate = new Date(dateValue);
+    // Compute difference between IST and country
     let offsetMs = (
-        new Date(parsedLocal.toLocaleString("en-US", { timeZone: istZone })) -
-        new Date(parsedLocal.toLocaleString("en-US", { timeZone: tz }))
+        new Date(istDate.toLocaleString("en-US", { timeZone: tz })) -
+        new Date(istDate.toLocaleString("en-US", { timeZone: istZone }))
     );
-    let istConverted = new Date(parsedLocal.getTime() + offsetMs);
+    let converted = new Date(istDate.getTime() + offsetMs);
 
     document.getElementById("converterResult").innerHTML =
-        `✅ ${countryName} time <b>${parsedLocal.toLocaleString()}</b> → IST time <b>${istConverted.toLocaleString()}</b>`;
+        `✅ IST time <b>${istDate.toLocaleString()}</b> → ${countryName} time <b>${converted.toLocaleString()}</b>`;
 });
 
 // Initial load
 updateTimes();
 </script>
+
 <div style="text-align:center; margin-top:20px; font-size:0.9em; color:#555;">
     Designed by: Manish Mishra
 </div>
